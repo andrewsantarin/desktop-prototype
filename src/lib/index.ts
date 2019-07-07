@@ -1,3 +1,4 @@
 export {
-  safeInvoke
+  safeInvoke,
+  safeInvokeWithRef,
 } from './safe-invoke';

@@ -28,6 +28,7 @@
     "react-new-window": "^0.1.1",
     "react-scripts": "3.0.1",
     "react-use": "^9.8.1",
+    "ts-optchain.macro": "^1.1.5",
     "tslint": "^5.17.0",
     "tslint-eslint-rules": "^5.4.0",
     "tslint-plugin-prettier": "^2.0.1",
