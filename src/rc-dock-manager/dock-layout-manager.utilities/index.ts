@@ -4,6 +4,10 @@ export {
 } from './create-layout-base';
 
 export {
+  createPropsGetter
+} from './create-props-getter';
+
+export {
   enhanceTabDataSchema
 } from './enhance-tab-data-schema';
 
