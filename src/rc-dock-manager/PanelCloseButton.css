@@ -1,0 +1,14 @@
+.my-panel-close-btn {
+  cursor: pointer;
+  font-family: Fredoka One;
+  color: red;
+  width: 24px;
+  text-align: center;
+  opacity: 0.3;
+  transition: all 0.25s ease-in-out;
+  line-height: 30px;
+}
+
+.my-panel-close-btn:hover {
+  opacity: 1;
+}

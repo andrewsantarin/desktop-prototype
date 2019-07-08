@@ -1,0 +1,4 @@
+/* Needed so that ag-grid components will render properly.*/
+.dock-pane-cache {
+  height: 100%;
+}

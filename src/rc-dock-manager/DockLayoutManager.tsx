@@ -1,4 +1,4 @@
-import React, { forwardRef, useRef, useImperativeHandle, FunctionComponent, ComponentType, ComponentPropsWithRef, useCallback } from 'react';
+import React, { forwardRef, useRef, useImperativeHandle, useCallback } from 'react';
 import { useMount } from 'react-use';
 import { useAutoControlled } from 'react-auto-controlled';
 import { DockLayout, LayoutBase, PanelBase, PanelData, TabData } from 'rc-dock';
@@ -7,8 +7,9 @@ import { isNullOrUndefined } from 'util';
 
 import { safeInvoke, safeInvokeWithRef } from 'lib';
 import { DockLayoutProps, TabDataSchema } from './dock-layout-manager.types';
-import { createLayoutBase, findLastIndex, findFirstDeepestPanel, findTabParentPanel } from './dock-layout-manager.utilities';
+import { createLayoutBase, findLastIndex, findFirstDeepestPanel, findTabParentPanel, splitLayoutId } from './dock-layout-manager.utilities';
 import { selectTabDataFromTabDataSchema } from './dock-layout-manager.selectors';
+import { TabTitle } from './TabTitle';
 
 
 export interface DockLayoutManagerApi {
@@ -179,6 +180,28 @@ export const DockLayoutManager = forwardRef<any, DockLayoutManagerProps>(functio
     }
   };
 
+  const doLoadTab: DockLayoutManagerProps['loadTab'] = (tabBase) => {
+    const { tabIdPrefix, tabDataSchema } = props;
+    const [ tabKey, tabIndex ] = splitLayoutId(tabBase.id, tabIdPrefix);
+    const tabData = selectTabDataFromTabDataSchema(tabKey, tabDataSchema);
+    const tabTitle: TabData['title'] = (
+      <TabTitle
+        title={tabData.title}
+        suffix={`${props.tabIdPrefix}${tabIndex}`}
+      />
+    );
+    const finalTab: TabData = createTabData(Object.assign(
+      {},
+      tabBase,
+      tabData,
+      { title: tabTitle }
+    ));
+
+    return finalTab;
+  };
+
+  const doSaveTab: DockLayoutManagerProps['saveTab'] = undefined;
+
   const loadLayout = (savedLayout: LayoutBase) => {
     safeInvokeWithRef(dockLayout, (dockLayout) => {
       dockLayout.loadLayout(savedLayout);
@@ -202,8 +225,8 @@ export const DockLayoutManager = forwardRef<any, DockLayoutManagerProps>(functio
     (newLayout: LayoutBase, currentTabId: string | null) => {
       let newActivePanelId: string;
 
+      // FIXME: This part is highly unpredictable. I don't know why, but rc-dock generates ids which are way off.
       if (currentTabId === null) {
-        // TODO: This part is highly unpredictable. I don't know why, but rc-dock generates ids which are way off.
         const { dockbox } = newLayout;
         const deepestPanel = findFirstDeepestPanel(dockbox) as PanelBase;
         newActivePanelId = deepestPanel.id as string;
@@ -243,8 +266,8 @@ export const DockLayoutManager = forwardRef<any, DockLayoutManagerProps>(functio
     <DockLayout
       afterPanelLoaded={handlePanelLoaded}
       afterPanelSaved={handlePanelSaved}
-      // loadTab={this.doLoadTab}
-      // saveTab={this.doSaveTab}
+      loadTab={doLoadTab}
+      saveTab={doSaveTab}
       dropMode={dropMode}
       layout={layout}
       groups={groups}
