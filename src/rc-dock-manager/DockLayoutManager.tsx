@@ -189,7 +189,10 @@ export class DockLayoutManager
 
   private addTabKeyToFirstAvailablePanel = (tabKey: string): (string | undefined) => {
     const { layout } = this.state;
-    const panel = findFirstDeepestPanel(layout.floatbox) || findFirstDeepestPanel(layout.dockbox);
+    const panel = (
+      findFirstDeepestPanel(layout.floatbox) ||
+      findFirstDeepestPanel(layout.dockbox)
+    );
 
     if (isNullOrUndefined(panel) || isNullOrUndefined(panel.id)) {
       return;
