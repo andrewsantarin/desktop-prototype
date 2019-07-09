@@ -17,14 +17,42 @@ import { selectTabDataFromTabDataSchema } from './dock-layout-manager.selectors'
 import { TabTitle } from './TabTitle';
 
 
+// #region Type declarations
 interface DockLayoutManagerApi {
+  /**
+   * Adds a tab to a panel using lookup reference IDs.
+   *
+   * @param {string} tabKey The schema lookup key of the tab to be added.
+   * @param {panelId} panelId The ID of the panel to add to.
+   * @returns {(string|undefined)} `tabId` — The ID of the created tab, if it was created.
+   */
   addTabKeyToPanelId: (tabKey: string, panelId: string) => (string | undefined);
+  /**
+   * Adds a tab to the active panel using lookup reference IDs
+   * without specifying the target panel directly.
+   *
+   * @public
+   * @param {string} tabKey The schema lookup key of the tab to be added.
+   * @returns {(string|undefined)} `tabId` — The ID of the created tab, if it was created.
+   */
   addTabKeyToActivePanel: (tabKey: string) => (string | undefined);
+  /**
+   * Sets the initial layout tree.
+   *
+   * @public
+   * @param {LayoutBase} savedLayout The "essential" layout tree details before passing them into the `<DockLayout>` component.
+   */
   loadLayout: DockLayout['loadLayout'];
+  /**
+   * Generates "essential" layout tree details from the `<DockLayout>` component's state.
+   *
+   * @public
+   * @returns {LayoutBase | undefined} The "essential" layout tree details.
+   */
   saveLayout: () => (LayoutBase | undefined);
 }
 
-export interface DockLayoutManagerDefaultProps {
+export type DockLayoutManagerDefaultProps = {
   /**
    * Tab identification prefix string for tab assignment purposes.
    *
@@ -40,12 +68,9 @@ export interface DockLayoutManagerDefaultProps {
    * @memberof DockLayoutManagerDefaultProps
    */
   tabDataSchema: TabDataSchema;
-}
+};
 
-export interface DockLayoutManagerProps extends
-  Omit<DockLayoutProps, 'onLayoutChange' | 'defaultLayout' | 'layout'>,
-  Partial<DockLayoutManagerDefaultProps> {
-  // #region auto controlled props
+export type DockLayoutManagerProps = Omit<DockLayoutProps, 'onLayoutChange' | 'defaultLayout' | 'layout'> & Partial<DockLayoutManagerDefaultProps> & {
   /**
    * Current active panel.
    *
@@ -77,9 +102,7 @@ export interface DockLayoutManagerProps extends
    * @memberof DockLayoutManagerProps
    */
   defaultLayout?: LayoutBase;
-  // #endregion
 
-  // #region custom event handler methods
   /**
    * The layout change event.
    *
@@ -100,15 +123,12 @@ export interface DockLayoutManagerProps extends
    * @memberof DockLayoutManagerProps
    */
   onLayoutLoad?: (layout: LayoutBase, activePanelId: string) => void;
-  // #endregion
-}
+};
 
 export type DockLayoutManagerState = Required<Pick<DockLayoutManagerProps, 'activePanelId' | 'layout'>>;
+// #endregion
 
-export const dockLayoutManagerDefaultProps: DockLayoutManagerDefaultProps = {
-  tabIdPrefix: LAYOUT_TAB_DATA_SCHEMA_ID_PREFIX,
-  tabDataSchema: {},
-};
+// #region Constant declarations
 export const dockLayoutManagerAutoControlledManager = new AutoControlledManager<DockLayoutManagerState, DockLayoutManagerProps>(
   [
     'activePanelId',
@@ -124,44 +144,34 @@ export const dockLayoutManagerAutoControlledManager = new AutoControlledManager<
   },
 );
 
+export const dockLayoutManagerDefaultProps: DockLayoutManagerDefaultProps = {
+  tabIdPrefix: LAYOUT_TAB_DATA_SCHEMA_ID_PREFIX,
+  tabDataSchema: {},
+};
 export const getProps = createPropsGetter(dockLayoutManagerDefaultProps);
+// #endregion
   
 export class DockLayoutManager
   extends Component<DockLayoutManagerProps, DockLayoutManagerState>
   implements AutoControlled<DockLayoutManagerState>, DockLayoutManagerApi {
   /**
    * Reference to the `<DockLayout>` component API.
-   *
-   * @protected
-   * @type {RefObject<DockLayout>}
-   * @memberof DockLayoutManager
    */
-  protected dockLayout = createRef<DockLayout>();
+  dockLayout = createRef<DockLayout>();
 
   static readonly defaultProps = dockLayoutManagerDefaultProps;
 
   static readonly getDerivedStateFromProps = dockLayoutManagerAutoControlledManager.getDerivedStateFromProps;
 
-  componentDidMount() {
-    const { layout, activePanelId } = this.state;
-
-    safeInvoke(this.props.onLayoutLoad, layout, activePanelId);
-  }
-
   state = dockLayoutManagerAutoControlledManager.getInitialAutoControlledStateFromProps(this.props);
 
   trySetState = dockLayoutManagerAutoControlledManager.trySetState;
 
+  componentDidMount() {
+    safeInvoke(this.props.onLayoutLoad, this.state.layout, this.state.activePanelId);
+  }
+
   // #region Tab insertion methods
-  /**
-   * Adds a tab to a panel using lookup reference IDs.
-   *
-   * @public
-   * @memberof DockLayoutManager
-   * @param {string} tabKey The schema lookup key of the tab to be added.
-   * @param {panelId} panelId The ID of the panel to add to.
-   * @returns {(string|undefined)} `tabId` — The ID of the created tab, if it was created.
-   */
   public addTabKeyToPanelId: DockLayoutManagerApi['addTabKeyToPanelId'] = (tabKey, panelId) => {
     return safeInvokeWithRef(this.dockLayout, (dockLayout) => {
       const panelData = dockLayout.find(panelId);
@@ -173,15 +183,6 @@ export class DockLayoutManager
     });
   }
 
-  /**
-   * Adds a tab to the active panel using lookup reference IDs
-   * without specifying the target panel directly.
-   *
-   * @public
-   * @memberof DockLayoutManager
-   * @param {string} tabKey The schema lookup key of the tab to be added.
-   * @returns {(string|undefined)} `tabId` — The ID of the created tab, if it was created.
-   */
   public addTabKeyToActivePanel: DockLayoutManagerApi['addTabKeyToActivePanel'] = (tabKey) => {
     if (this.state.activePanelId !== '') {
       return this.addTabKeyToPanelId(tabKey, this.state.activePanelId);
@@ -190,19 +191,9 @@ export class DockLayoutManager
     }
   }
 
-  /**
-   * Adds a tab to the first available panel using lookup reference IDs.
-   *
-   * @private
-   * @memberof DockLayoutManager
-   * @param {string} tabKey The schema lookup key of the tab to be added.
-   * @returns {(string|undefined)} `tabId` — The ID of the created tab, if it was created.
-   */
   private addTabKeyToFirstAvailablePanel = (tabKey: string): (string | undefined) => {
-    const panel = (
-      findFirstDeepestPanel(this.state.layout.floatbox) ||
-      findFirstDeepestPanel(this.state.layout.dockbox)
-    );
+    const { layout } = this.state;
+    const panel = findFirstDeepestPanel(layout.floatbox) || findFirstDeepestPanel(layout.dockbox);
 
     if (isNullOrUndefined(panel) || isNullOrUndefined(panel.id)) {
       return;
@@ -213,7 +204,7 @@ export class DockLayoutManager
     return safeInvokeWithRef(this.dockLayout, (dockLayout) => {
       const targetPanel = dockLayout.find(panelId) as PanelData;
       const dockLayoutProps = this.createDockLayoutProps(dockLayout, this.props);
-      const currentLayout = DockLayout.loadLayoutData(this.state.layout, dockLayoutProps);
+      const currentLayout = DockLayout.loadLayoutData(layout, dockLayoutProps);
       const newTab = this.createTabData(tabKey);
       const newLayout = addTabToPanel(currentLayout, newTab, targetPanel);
 
@@ -225,14 +216,6 @@ export class DockLayoutManager
     });
   }
 
-  /**
-   * Generates a full tab definition from a given tab schema lookup key.
-   *
-   * @private
-   * @memberof DockLayoutManager
-   * @param {string} tabId The schema lookup key of the referenced tab.
-   * @returns {TabData} The full tab definition as referenced from the key-value lookup.
-   */
   private createTabData = (tabKey: string) => {
     const { tabIdPrefix, tabDataSchema } = getProps(this.props);
     const { layout } = this.state;
@@ -246,12 +229,6 @@ export class DockLayoutManager
     return tabData;
   }
 
-  /**
-   * Creates a props for `DockLayout.loadLayoutData()`.
-   *
-   * @private
-   * @memberof DockLayoutManager
-   */
   private createDockLayoutProps = (dockLayout: DockLayout, props: DockLayoutManagerProps): DockLayoutProps => {
     const { loadTab, afterPanelLoaded } = props;
     const defaultLayout = dockLayout.state.layout;
@@ -266,26 +243,12 @@ export class DockLayoutManager
   // #endregion
 
   // #region Layout object methods
-  /**
-   * Sets the initial layout tree.
-   *
-   * @public
-   * @memberof DockLayoutManager
-   * @param {LayoutBase} savedLayout The "essential" layout tree details before passing them into the `<DockLayout>` component.
-   */
   public loadLayout = (savedLayout: LayoutBase) => {
     safeInvokeWithRef(this.dockLayout, (dockLayout) => {
       dockLayout.loadLayout(savedLayout);
     });
   }
 
-  /**
-   * Generates "essential" layout tree details from the `<DockLayout>` component's state.
-   *
-   * @public
-   * @memberof DockLayoutManager
-   * @returns {LayoutBase | undefined} The "essential" layout tree details.
-   */
   public saveLayout = () => {
     return safeInvokeWithRef(this.dockLayout, (dockLayout) => {
       return dockLayout.saveLayout();
@@ -294,14 +257,6 @@ export class DockLayoutManager
   // #endregion
 
   // #region Layout default tab method overrides
-  /**
-   * Creates the tab definitions using a `tabId` and key-value lookup.
-   *
-   * @private
-   * @memberof DockLayoutManager
-   * @param {TabBase} tab The bare tab definitions before passing them into the `<DockLayout>` component.
-   * @returns {TabData} The full tab definitions as referenced from the key-value lookup.
-   */
   private doLoadTab: DockLayoutManagerProps['loadTab'] = (tabBase) => {
     const { tabIdPrefix, tabDataSchema } = getProps(this.props);
     const [tabKey, tabIndex] = splitLayoutId(tabBase.id, tabIdPrefix);
@@ -322,22 +277,10 @@ export class DockLayoutManager
     return finalTab;
   }
 
-  /**
-   * @private @hidden @internal
-   * @memberof DockLayoutManager
-   */
   private doSaveTab: DockLayoutManagerProps['saveTab'];
   // #endregion
 
   // #region Layout event handlers
-  /**
-   * Handles any changes to the layout.
-   *
-   * @private
-   * @memberof DockLayoutManager
-   * @param {LayoutBase} newLayout The new layout base.
-   * @param {(string | null)} currentTabId The identification of the tab changed.
-   */
   private handleLayoutChange = (newLayout: LayoutBase, currentTabId: string | null) => {
     let activePanelId: string;
 
@@ -359,15 +302,7 @@ export class DockLayoutManager
     safeInvoke(this.props.onLayoutChange, newLayout, currentTabId, activePanelId);
   }
 
-  /**
-   * @private @hidden @internal
-   * @memberof DockLayoutManager
-   */
   private handlePanelLoaded: DockLayoutManagerProps['afterPanelLoaded'];
-  /**
-   * @private @hidden @internal
-   * @memberof DockLayoutManager
-   */
   private handlePanelSaved: DockLayoutManagerProps['afterPanelSaved'];
   // #endregion
 
