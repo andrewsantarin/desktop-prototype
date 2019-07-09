@@ -18,7 +18,7 @@ import { TabTitle } from './TabTitle';
 
 
 // #region Type declarations
-interface DockLayoutManagerApi {
+export interface DockLayoutManagerApi {
   /**
    * Adds a tab to a panel using lookup reference IDs.
    *
@@ -148,23 +148,19 @@ export const dockLayoutManagerDefaultProps: DockLayoutManagerDefaultProps = {
   tabIdPrefix: LAYOUT_TAB_DATA_SCHEMA_ID_PREFIX,
   tabDataSchema: {},
 };
-export const getProps = createPropsGetter(dockLayoutManagerDefaultProps);
+export const getDockLayoutManagerProps = createPropsGetter(dockLayoutManagerDefaultProps);
 // #endregion
   
 export class DockLayoutManager
   extends Component<DockLayoutManagerProps, DockLayoutManagerState>
   implements AutoControlled<DockLayoutManagerState>, DockLayoutManagerApi {
-  /**
-   * Reference to the `<DockLayout>` component API.
-   */
+  /** Reference to the `<DockLayout>` component API. */
   dockLayout = createRef<DockLayout>();
 
   static readonly defaultProps = dockLayoutManagerDefaultProps;
-
   static readonly getDerivedStateFromProps = dockLayoutManagerAutoControlledManager.getDerivedStateFromProps;
 
   state = dockLayoutManagerAutoControlledManager.getInitialAutoControlledStateFromProps(this.props);
-
   trySetState = dockLayoutManagerAutoControlledManager.trySetState;
 
   componentDidMount() {
@@ -217,7 +213,7 @@ export class DockLayoutManager
   }
 
   private createTabData = (tabKey: string) => {
-    const { tabIdPrefix, tabDataSchema } = getProps(this.props);
+    const { tabIdPrefix, tabDataSchema } = getDockLayoutManagerProps(this.props);
     const { layout } = this.state;
     const tabNextIndex = findLastIndex(layout, this.props.tabIdPrefix) + 1;
     const tabData = Object.assign(
@@ -258,8 +254,8 @@ export class DockLayoutManager
 
   // #region Layout default tab method overrides
   private doLoadTab: DockLayoutManagerProps['loadTab'] = (tabBase) => {
-    const { tabIdPrefix, tabDataSchema } = getProps(this.props);
-    const [tabKey, tabIndex] = splitLayoutId(tabBase.id, tabIdPrefix);
+    const { tabIdPrefix, tabDataSchema } = getDockLayoutManagerProps(this.props);
+    const [ tabKey, tabIndex ] = splitLayoutId(tabBase.id, tabIdPrefix);
     const tabData = selectTabDataFromTabDataSchema(tabKey, tabDataSchema);
     const tabTitle: TabData['title'] = (
       <TabTitle
@@ -288,7 +284,7 @@ export class DockLayoutManager
     if (currentTabId === null) {
       const { dockbox } = newLayout;
       const deepestPanel = findFirstDeepestPanel(dockbox) as PanelBase;
-      activePanelId = deepestPanel.id as string;
+      activePanelId = deepestPanel.id!;
     } else {
       const currentTabPanel = findTabParentPanel(newLayout, currentTabId) || {} as PanelBase;
       activePanelId = currentTabPanel.id || this.state.activePanelId;
