@@ -4,3 +4,29 @@
   margin-left: 0.25em;
   color: #000;
 }
+
+.dock-tab-btn-group {
+  display: inline-block;
+  margin-left: 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.dock-tab-btn {
+  color: #bbb;
+  cursor: pointer;
+  opacity: 0.3;
+  transition: opacity 0.25s ease-in-out;
+}
+
+.dock-tab-btn svg.dock-tab-btn-icon {
+  width: 1.5em;
+}
+
+.dock-tab-btn:hover {
+  color: #666;
+}
+
+.dock-tab:hover .dock-tab-btn {
+  opacity: 1;
+}

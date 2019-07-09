@@ -1,28 +1,28 @@
-import React, { CSSProperties, Component, createRef, Comp } from 'react';
-import { PanelData, DockContext, LayoutBase } from 'rc-dock';
+import React, { CSSProperties, Component, createRef } from 'react';
+import { PanelData, DockContext } from 'rc-dock';
 import { DockLayoutManager } from 'rc-dock-manager/DockLayoutManager';
 import { PanelCloseButton } from 'rc-dock-manager/PanelCloseButton';
 import { TabDataSchema, TabGroupSchema, TabDataOptions } from 'rc-dock-manager/dock-layout-manager.types';
-import { getActiveIds, enhanceTabDataSchema } from 'rc-dock-manager/dock-layout-manager.utilities';
+import { enhanceTabDataSchema } from 'rc-dock-manager/dock-layout-manager.utilities';
 
 import { safeInvokeWithRef, safeInvoke } from 'lib';
 import { isNullOrUndefined } from 'util';
 import { Test, KEY as TEST } from 'Test';
 
 
-interface AppProps {
+type AppProps = {
 }
 
-interface AppState {
+type AppState = {
 }
 
 export class App extends Component<AppProps, AppState> {
-  private dockLayoutManager = createRef<typeof DockLayoutManager>();
+  private dockLayoutManager = createRef<DockLayoutManager>();
 
   // #region tab definitions
   private tabDataSchema: TabDataSchema = {
     [TEST]: {
-      title: 'Quote Screen',
+      title: 'Test',
       content: (tab) => {
         return (
           <Test id={tab.id} />
@@ -74,7 +74,7 @@ export class App extends Component<AppProps, AppState> {
 
   render() {
     const style: CSSProperties = {
-      position: "absolute",
+      position: 'absolute',
       left: 10,
       top: 10,
       right: 10,
@@ -90,9 +90,27 @@ export class App extends Component<AppProps, AppState> {
       <DockLayoutManager
         ref={this.dockLayoutManager}
         groups={this.tabGroupSchema}
-        // defaultActivePanelId={layoutProps.activePanelId}
-        // defaultLayout={layoutProps.layout}
-        dropMode="edge"
+        defaultActivePanelId="+1"
+        defaultLayout={{
+          dockbox: {
+            id: '+1',
+            mode: 'horizontal',
+            children: [
+              {
+                id: '+0',
+                tabs: [
+                  {
+                    id: `${TEST}#1`,
+                  },
+                  {
+                    id: `${TEST}#2`,
+                  },
+                ],
+              },
+            ],
+          },
+        }}
+        dropMode="default"
         style={style}
         tabDataSchema={tabDataSchema}
       />

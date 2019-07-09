@@ -34,3 +34,5 @@ export interface TabDataExtended extends Omit<TabData, 'content'> {
 export interface TabDataSchemaExtended {
   [key: string]: TabDataExtended;
 }
+
+export type DetachedWindowLayout = { [key: string]: TabData };
