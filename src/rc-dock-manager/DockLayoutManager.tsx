@@ -1,25 +1,58 @@
-import React, { forwardRef, useRef, useImperativeHandle, useCallback } from 'react';
-import { useMount } from 'react-use';
-import { useAutoControlled } from 'react-auto-controlled';
+import React, { createRef, Component } from 'react';
+import { AutoControlledManager, AutoControlled } from 'react-auto-controlled';
 import { DockLayout, LayoutBase, PanelBase, PanelData, TabData } from 'rc-dock';
 import { addTabToPanel } from 'rc-dock/lib/Algorithm';
 import { isNullOrUndefined } from 'util';
 
+import 'rc-dock/dist/rc-dock.css';
+import './DockLayoutManager.css';
+
 import { safeInvoke, safeInvokeWithRef } from 'lib';
+
+import { LAYOUT_TAB_DATA_SCHEMA_ID_PREFIX } from './dock-layout-manager.constants';
 import { DockLayoutProps, TabDataSchema } from './dock-layout-manager.types';
-import { createLayoutBase, findLastIndex, findFirstDeepestPanel, findTabParentPanel, splitLayoutId } from './dock-layout-manager.utilities';
+import { createLayoutBase, createPropsGetter, findLastIndex, findFirstDeepestPanel, findTabParentPanel, splitLayoutId } from './dock-layout-manager.utilities';
+import { createTabData } from './dock-layout-manager.utilities/create-layout-base';
 import { selectTabDataFromTabDataSchema } from './dock-layout-manager.selectors';
 import { TabTitle } from './TabTitle';
 
 
+// #region Type declarations
 export interface DockLayoutManagerApi {
+  /**
+   * Adds a tab to a panel using lookup reference IDs.
+   *
+   * @param {string} tabKey The schema lookup key of the tab to be added.
+   * @param {panelId} panelId The ID of the panel to add to.
+   * @returns {(string|undefined)} `tabId` — The ID of the created tab, if it was created.
+   */
   addTabKeyToPanelId: (tabKey: string, panelId: string) => (string | undefined);
+  /**
+   * Adds a tab to the active panel using lookup reference IDs
+   * without specifying the target panel directly.
+   *
+   * @public
+   * @param {string} tabKey The schema lookup key of the tab to be added.
+   * @returns {(string|undefined)} `tabId` — The ID of the created tab, if it was created.
+   */
   addTabKeyToActivePanel: (tabKey: string) => (string | undefined);
+  /**
+   * Sets the initial layout tree.
+   *
+   * @public
+   * @param {LayoutBase} savedLayout The "essential" layout tree details before passing them into the `<DockLayout>` component.
+   */
   loadLayout: DockLayout['loadLayout'];
+  /**
+   * Generates "essential" layout tree details from the `<DockLayout>` component's state.
+   *
+   * @public
+   * @returns {LayoutBase | undefined} The "essential" layout tree details.
+   */
   saveLayout: () => (LayoutBase | undefined);
 }
 
-export interface DockLayoutManagerDefaultProps {
+export type DockLayoutManagerDefaultProps = {
   /**
    * Tab identification prefix string for tab assignment purposes.
    *
@@ -35,13 +68,9 @@ export interface DockLayoutManagerDefaultProps {
    * @memberof DockLayoutManagerDefaultProps
    */
   tabDataSchema: TabDataSchema;
-}
+};
 
-export interface DockLayoutManagerProps extends
-  Omit<DockLayoutProps, 'onLayoutChange' | 'defaultLayout' | 'layout'>,
-  Partial<DockLayoutManagerDefaultProps>
-{
-  // #region auto controlled props
+export type DockLayoutManagerProps = Omit<DockLayoutProps, 'onLayoutChange' | 'defaultLayout' | 'layout'> & Partial<DockLayoutManagerDefaultProps> & {
   /**
    * Current active panel.
    *
@@ -73,9 +102,7 @@ export interface DockLayoutManagerProps extends
    * @memberof DockLayoutManagerProps
    */
   defaultLayout?: LayoutBase;
-  // #endregion
 
-  // #region custom event handler methods
   /**
    * The layout change event.
    *
@@ -96,33 +123,109 @@ export interface DockLayoutManagerProps extends
    * @memberof DockLayoutManagerProps
    */
   onLayoutLoad?: (layout: LayoutBase, activePanelId: string) => void;
-  // #endregion
-}
+};
 
-export const DockLayoutManager = forwardRef<any, DockLayoutManagerProps>(function DockLayoutManager(props, ref) {
-  const dockLayout = useRef<DockLayout>(null);
+export type DockLayoutManagerState = Required<Pick<DockLayoutManagerProps, 'activePanelId' | 'layout'>>;
+// #endregion
 
-  const [ activePanelId, setActivePanelId ] = useAutoControlled('', {
-    prop: props.activePanelId,
-    defaultProp: props.defaultActivePanelId,
-  });
-  const [ layout, setLayout ] = useAutoControlled(createLayoutBase(), {
-    prop: props.layout,
-    defaultProp: props.defaultLayout,
-  });
+// #region Constant declarations
+export const dockLayoutManagerAutoControlledManager = new AutoControlledManager<DockLayoutManagerState, DockLayoutManagerProps>(
+  [
+    'activePanelId',
+    'layout',
+  ],
+  {
+    getInitialAutoControlledState() {
+      return {
+        activePanelId: '',
+        layout: createLayoutBase(),
+      };
+    },
+  },
+);
 
-  const createTabData = (tabKey: string) => {
-    const { tabIdPrefix, tabDataSchema } = props;
-    const tabNextIndex = findLastIndex(layout, tabIdPrefix) + 1;
-    const tabData = {
-      ...selectTabDataFromTabDataSchema(tabKey, tabDataSchema),
-      id: `${tabKey}${tabIdPrefix}${tabNextIndex}`,
-    };
+export const dockLayoutManagerDefaultProps: DockLayoutManagerDefaultProps = {
+  tabIdPrefix: LAYOUT_TAB_DATA_SCHEMA_ID_PREFIX,
+  tabDataSchema: {},
+};
+export const getDockLayoutManagerProps = createPropsGetter(dockLayoutManagerDefaultProps);
+// #endregion
+  
+export class DockLayoutManager
+  extends Component<DockLayoutManagerProps, DockLayoutManagerState>
+  implements AutoControlled<DockLayoutManagerState>, DockLayoutManagerApi {
+  /** Reference to the `<DockLayout>` component API. */
+  dockLayout = createRef<DockLayout>();
+
+  static readonly defaultProps = dockLayoutManagerDefaultProps;
+  static readonly getDerivedStateFromProps = dockLayoutManagerAutoControlledManager.getDerivedStateFromProps;
+
+  state = dockLayoutManagerAutoControlledManager.getInitialAutoControlledStateFromProps(this.props);
+  trySetState = dockLayoutManagerAutoControlledManager.trySetState;
+
+  componentDidMount() {
+    safeInvoke(this.props.onLayoutLoad, this.state.layout, this.state.activePanelId);
+  }
+
+  // #region Tab insertion methods
+  public addTabKeyToPanelId: DockLayoutManagerApi['addTabKeyToPanelId'] = (tabKey, panelId) => {
+    return safeInvokeWithRef(this.dockLayout, (dockLayout) => {
+      const panelData = dockLayout.find(panelId);
+      const tabData = this.createTabData(tabKey);
+
+      dockLayout.dockMove(tabData, panelData, 'middle');
+
+      return tabData.id;
+    });
+  }
+
+  public addTabKeyToActivePanel: DockLayoutManagerApi['addTabKeyToActivePanel'] = (tabKey) => {
+    if (this.state.activePanelId !== '') {
+      return this.addTabKeyToPanelId(tabKey, this.state.activePanelId);
+    } else {
+      return this.addTabKeyToFirstAvailablePanel(tabKey);
+    }
+  }
+
+  private addTabKeyToFirstAvailablePanel = (tabKey: string): (string | undefined) => {
+    const { layout } = this.state;
+    const panel = findFirstDeepestPanel(layout.floatbox) || findFirstDeepestPanel(layout.dockbox);
+
+    if (isNullOrUndefined(panel) || isNullOrUndefined(panel.id)) {
+      return;
+    }
+
+    const { id: panelId } = panel;
+
+    return safeInvokeWithRef(this.dockLayout, (dockLayout) => {
+      const targetPanel = dockLayout.find(panelId) as PanelData;
+      const dockLayoutProps = this.createDockLayoutProps(dockLayout, this.props);
+      const currentLayout = DockLayout.loadLayoutData(layout, dockLayoutProps);
+      const newTab = this.createTabData(tabKey);
+      const newLayout = addTabToPanel(currentLayout, newTab, targetPanel);
+
+      // Explicitly update the state of the underlying `dockLayout` to generate the `LayoutBase` format.
+      // The generated result will be consumed by this manager's `handleLayoutChange` function
+      dockLayout.changeLayout(newLayout, newTab.id);
+
+      return newTab.id;
+    });
+  }
+
+  private createTabData = (tabKey: string) => {
+    const { tabIdPrefix, tabDataSchema } = getDockLayoutManagerProps(this.props);
+    const { layout } = this.state;
+    const tabNextIndex = findLastIndex(layout, this.props.tabIdPrefix) + 1;
+    const tabData = Object.assign(
+      {},
+      selectTabDataFromTabDataSchema(tabKey, tabDataSchema),
+      { id: `${tabKey}${tabIdPrefix}${tabNextIndex}` },
+    );
 
     return tabData;
-  };
+  }
 
-  const createDockLayoutProps = (dockLayout: DockLayout, props: DockLayoutManagerProps): DockLayoutProps => {
+  private createDockLayoutProps = (dockLayout: DockLayout, props: DockLayoutManagerProps): DockLayoutProps => {
     const { loadTab, afterPanelLoaded } = props;
     const defaultLayout = dockLayout.state.layout;
     const dockLayoutProps: DockLayoutProps = {
@@ -132,62 +235,32 @@ export const DockLayoutManager = forwardRef<any, DockLayoutManagerProps>(functio
     };
 
     return dockLayoutProps;
-  };
+  }
+  // #endregion
 
-  const addTabKeyToFirstAvailablePanel = (tabKey: string): (string | undefined) => {
-    const panel = (
-      findFirstDeepestPanel(layout.floatbox) ||
-      findFirstDeepestPanel(layout.dockbox)
-    );
-
-    if (isNullOrUndefined(panel) || isNullOrUndefined(panel.id)) {
-      return;
-    }
-
-    const { id: panelId } = panel;
-
-    return safeInvokeWithRef(dockLayout, (dockLayout) => {
-      const targetPanel = dockLayout.find(panelId) as PanelData;
-      const dockLayoutProps = createDockLayoutProps(dockLayout, props);
-      const currentLayout = DockLayout.loadLayoutData(layout, dockLayoutProps);
-      const newTab = createTabData(tabKey);
-      const newLayout = addTabToPanel(currentLayout, newTab, targetPanel);
-
-      // Explicitly update the state of the underlying `dockLayout` to generate the `LayoutBase` format.
-      // The generated result will be consumed by this manager's `handleLayoutChange` function
-      dockLayout.changeLayout(newLayout, newTab.id);
-
-      return newTab.id;
+  // #region Layout object methods
+  public loadLayout = (savedLayout: LayoutBase) => {
+    safeInvokeWithRef(this.dockLayout, (dockLayout) => {
+      dockLayout.loadLayout(savedLayout);
     });
-  };
+  }
 
-  const addTabKeyToPanelId: DockLayoutManagerApi['addTabKeyToPanelId'] = (tabKey, panelId) => {
-    return safeInvokeWithRef(dockLayout, (dockLayout) => {
-      const panelData = dockLayout.find(panelId);
-      const tabData = createTabData(tabKey);
-
-      dockLayout.dockMove(tabData, panelData, 'middle');
-
-      return tabData.id;
+  public saveLayout = () => {
+    return safeInvokeWithRef(this.dockLayout, (dockLayout) => {
+      return dockLayout.saveLayout();
     });
-  };
+  }
+  // #endregion
 
-  const addTabKeyToActivePanel: DockLayoutManagerApi['addTabKeyToActivePanel'] = (tabKey) => {
-    if (activePanelId !== '') {
-      return addTabKeyToPanelId(tabKey, activePanelId);
-    } else {
-      return addTabKeyToFirstAvailablePanel(tabKey);
-    }
-  };
-
-  const doLoadTab: DockLayoutManagerProps['loadTab'] = (tabBase) => {
-    const { tabIdPrefix, tabDataSchema } = props;
+  // #region Layout default tab method overrides
+  private doLoadTab: DockLayoutManagerProps['loadTab'] = (tabBase) => {
+    const { tabIdPrefix, tabDataSchema } = getDockLayoutManagerProps(this.props);
     const [ tabKey, tabIndex ] = splitLayoutId(tabBase.id, tabIdPrefix);
     const tabData = selectTabDataFromTabDataSchema(tabKey, tabDataSchema);
     const tabTitle: TabData['title'] = (
       <TabTitle
         title={tabData.title}
-        suffix={`${props.tabIdPrefix}${tabIndex}`}
+        suffix={`${this.props.tabIdPrefix}${tabIndex}`}
       />
     );
     const finalTab: TabData = createTabData(Object.assign(
@@ -198,82 +271,57 @@ export const DockLayoutManager = forwardRef<any, DockLayoutManagerProps>(functio
     ));
 
     return finalTab;
-  };
+  }
 
-  const doSaveTab: DockLayoutManagerProps['saveTab'] = undefined;
+  private doSaveTab: DockLayoutManagerProps['saveTab'];
+  // #endregion
 
-  const loadLayout = (savedLayout: LayoutBase) => {
-    safeInvokeWithRef(dockLayout, (dockLayout) => {
-      dockLayout.loadLayout(savedLayout);
+  // #region Layout event handlers
+  private handleLayoutChange = (newLayout: LayoutBase, currentTabId: string | null) => {
+    let activePanelId: string;
+
+    // FIXME: This part is highly unpredictable. I don't know why, but rc-dock generates ids which are way off.
+    if (currentTabId === null) {
+      const { dockbox } = newLayout;
+      const deepestPanel = findFirstDeepestPanel(dockbox) as PanelBase;
+      activePanelId = deepestPanel.id!;
+    } else {
+      const currentTabPanel = findTabParentPanel(newLayout, currentTabId) || {} as PanelBase;
+      activePanelId = currentTabPanel.id || this.state.activePanelId;
+    }
+
+    this.trySetState({
+      layout: newLayout,
+      activePanelId: activePanelId,
     });
-  };
 
-  const saveLayout = () => {
-    return safeInvokeWithRef(dockLayout, (dockLayout) => {
-      return dockLayout.saveLayout();
-    });
-  };
+    safeInvoke(this.props.onLayoutChange, newLayout, currentTabId, activePanelId);
+  }
 
-  const api: DockLayoutManagerApi = {
-    addTabKeyToPanelId,
-    addTabKeyToActivePanel,
-    loadLayout,
-    saveLayout,
-  };
+  private handlePanelLoaded: DockLayoutManagerProps['afterPanelLoaded'];
+  private handlePanelSaved: DockLayoutManagerProps['afterPanelSaved'];
+  // #endregion
 
-  const handleLayoutChange = useCallback(
-    (newLayout: LayoutBase, currentTabId: string | null) => {
-      let newActivePanelId: string;
+  render() {
+    // Ignore `defaultLayout`, `layout` from this.props.
+    // Refer to the manager's internal `layout` state instead.
+    // It should be able to govern itself without needing too much external control.
+    const { style, groups, dropMode } = this.props;
+    const { layout } = this.state;
 
-      // FIXME: This part is highly unpredictable. I don't know why, but rc-dock generates ids which are way off.
-      if (currentTabId === null) {
-        const { dockbox } = newLayout;
-        const deepestPanel = findFirstDeepestPanel(dockbox) as PanelBase;
-        newActivePanelId = deepestPanel.id as string;
-      } else {
-        const currentTabPanel = findTabParentPanel(newLayout, currentTabId) || {} as PanelBase;
-        newActivePanelId = currentTabPanel.id || activePanelId;
-      }
-
-      setLayout(newLayout);
-      setActivePanelId(newActivePanelId);
-
-      safeInvoke(props.onLayoutChange, newLayout, currentTabId, activePanelId);
-    },
-    [
-      setLayout,
-      setActivePanelId,
-      safeInvoke,
-      props,
-    ]
-  );
-
-  const handlePanelLoaded: DockLayoutManagerProps['afterPanelLoaded'] = undefined;
-  const handlePanelSaved: DockLayoutManagerProps['afterPanelSaved'] = undefined;
-
-  useImperativeHandle(ref, () => api);
-
-  useMount(() => {
-    safeInvoke(props.onLayoutLoad, layout, activePanelId);
-  });
-
-  // Ignore `defaultLayout`, `layout` from props.
-  // Refer to the manager's internal `layout` state instead.
-  // It should be able to govern itself without needing too much external control.
-  const { style, groups, dropMode } = props;
-
-  return (
-    <DockLayout
-      afterPanelLoaded={handlePanelLoaded}
-      afterPanelSaved={handlePanelSaved}
-      loadTab={doLoadTab}
-      saveTab={doSaveTab}
-      dropMode={dropMode}
-      layout={layout}
-      groups={groups}
-      onLayoutChange={handleLayoutChange}
-      ref={dockLayout}
-      style={style}
-    />
-  );
-});
+    return (
+      <DockLayout
+        afterPanelLoaded={this.handlePanelLoaded}
+        afterPanelSaved={this.handlePanelSaved}
+        loadTab={this.doLoadTab}
+        saveTab={this.doSaveTab}
+        dropMode={dropMode}
+        layout={layout}
+        groups={groups}
+        onLayoutChange={this.handleLayoutChange}
+        ref={this.dockLayout}
+        style={style}
+      />
+    );
+  }
+}
