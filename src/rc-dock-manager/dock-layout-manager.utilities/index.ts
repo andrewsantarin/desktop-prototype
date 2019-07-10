@@ -4,6 +4,10 @@ export {
 } from './create-layout-base';
 
 export {
+  createNewWindowFeatures
+} from './create-new-window-features';
+
+export {
   createPropsGetter
 } from './create-props-getter';
 

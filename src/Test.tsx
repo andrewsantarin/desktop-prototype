@@ -9,6 +9,9 @@ export const Test = ({ id }: TestProps) => {
   return (
     <div>
       Test: {id}
+      <p>
+        <strong>Hello, World!</strong>
+      </p>
     </div>
   );
 };

@@ -1,9 +1,10 @@
 import React, { createRef, Component, Fragment } from 'react';
 import { AutoControlledManager, AutoControlled } from 'react-auto-controlled';
-import NewWindow, { IWindowFeatures } from 'react-new-window';
+import NewWindow from 'react-new-window';
 import { DockLayout, LayoutBase, PanelBase, PanelData, TabBase, TabData } from 'rc-dock';
 import { addTabToPanel } from 'rc-dock/lib/Algorithm';
 import { memorize } from 'memorize-decorator';
+import isFunction from 'lodash/isFunction';
 import { isNullOrUndefined } from 'util';
 
 import 'rc-dock/dist/rc-dock.css';
@@ -13,60 +14,10 @@ import { safeInvoke, safeInvokeWithRef } from 'lib';
 
 import { LAYOUT_TAB_DATA_SCHEMA_ID_PREFIX } from './dock-layout-manager.constants';
 import { DockLayoutProps, TabDataSchema, DetachedWindowLayout } from './dock-layout-manager.types';
-import { createLayoutBase, createPropsGetter, findLastIndex, findFirstDeepestPanel, findTabParentPanel, splitLayoutId } from './dock-layout-manager.utilities';
+import { createLayoutBase, createNewWindowFeatures, createPropsGetter, findLastIndex, findFirstDeepestPanel, findTabParentPanel, splitLayoutId } from './dock-layout-manager.utilities';
 import { createTabData } from './dock-layout-manager.utilities/create-layout-base';
 import { selectTabDataFromTabDataSchema } from './dock-layout-manager.selectors';
 import { TabTitle } from './TabTitle';
-
-
-
-
-const createNewWindowFeatures = (tabData: TabData) => {
-  const { parent: panelData } = tabData;
-
-  if (isNullOrUndefined(panelData)) {
-    const features: IWindowFeatures = {
-      width: 600,
-      height: 480,
-    };
-
-    return features;
-  }
-
-  const panelElement = document.querySelectorAll(`[data-dockid='${panelData.id!}']`)[0];
-
-  type PositionMap = {
-    x: keyof Pick<ClientRect, 'left'>;
-    y: keyof Pick<ClientRect, 'top'>;
-    w: keyof Pick<ClientRect, 'width'>;
-    h: keyof Pick<ClientRect, 'height'>;
-  }
-  const positonMap: PositionMap = {
-    w: 'width',
-    h: 'height',
-    x: 'left',
-    y: 'top',
-  };
-
-  const features: IWindowFeatures = {
-    width: 0,
-    height: 0,
-  };
-
-  Object.keys(positonMap).forEach((key) => {
-    const knownValue = panelData[key as keyof Pick<PanelData, 'x' | 'y'>];
-    const positonMapKey = positonMap[key as keyof PositionMap];
-    if (!isNullOrUndefined(knownValue)) {
-      features[positonMapKey] = knownValue;
-    } else {
-      const rect = panelElement.getBoundingClientRect();
-      features[positonMapKey] = rect[positonMapKey];
-    }
-  });
-
-  return features;
-};
-
 
 
 // #region Type declarations
@@ -416,6 +367,16 @@ export class DockLayoutManager
   }
   // #endregion
 
+  renderNewWindowContent = (tabData: TabData) => {
+    const { content } = tabData;
+
+    if (isFunction(content)) {
+      return content(tabData);
+    } else {
+      return content;
+    }
+  }
+
   render() {
     // Ignore `defaultLayout`, `layout` from this.props.
     // Refer to the manager's internal `layout` state instead.
@@ -442,7 +403,7 @@ export class DockLayoutManager
             key={key}
             features={createNewWindowFeatures(detachedWindowLayout[key])}
           >
-            {key}
+            {this.renderNewWindowContent(detachedWindowLayout[key])}
           </NewWindow>
         ))}
       </Fragment>
