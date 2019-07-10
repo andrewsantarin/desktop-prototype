@@ -21,7 +21,7 @@ import { TabTitle } from './TabTitle';
 
 
 
-const createNewWindowFeatures = (tabData: TabData) => {
+const createNewWindowFeatures = (tabData: TabData): IWindowFeatures => {
   const { parent: panelData } = tabData;
 
   if (isNullOrUndefined(panelData)) {
@@ -65,6 +65,25 @@ const createNewWindowFeatures = (tabData: TabData) => {
   });
 
   return features;
+};
+
+const createDefaultLayout = (tabBase: TabBase): LayoutBase => {
+  return {
+    dockbox: {
+      id: '+1',
+      mode: 'horizontal',
+      children: [
+        {
+          id: '+0',
+          tabs: [
+            {
+              id: tabBase.id,
+            },
+          ],
+        },
+      ],
+    },
+  };
 };
 
 
@@ -378,6 +397,7 @@ export class DockLayoutManager
 
   // #region Layout event handlers
   private handleLayoutChange = (newLayout: LayoutBase, currentTabId: string | null) => {
+    console.log('DEBUGME', 'handleLayoutChange');
     let activePanelId: string;
 
     // FIXME: This part is highly unpredictable. I don't know why, but rc-dock generates ids which are way off.
@@ -420,7 +440,7 @@ export class DockLayoutManager
     // Ignore `defaultLayout`, `layout` from this.props.
     // Refer to the manager's internal `layout` state instead.
     // It should be able to govern itself without needing too much external control.
-    const { style, groups, dropMode } = this.props;
+    const { style, groups, dropMode, tabDataSchema } = this.props;
     const { layout, detachedWindowLayout } = this.state;
 
     return (
@@ -437,14 +457,25 @@ export class DockLayoutManager
           ref={this.dockLayout}
           style={style}
         />
-        {Object.keys(detachedWindowLayout).map((key) => (
-          <NewWindow
-            key={key}
-            features={createNewWindowFeatures(detachedWindowLayout[key])}
-          >
-            {key}
-          </NewWindow>
-        ))}
+        {Object.keys(detachedWindowLayout).map((key) => {
+          const defaultLayout = createDefaultLayout(detachedWindowLayout[key]);
+
+          return (
+            <NewWindow
+              key={key}
+              features={createNewWindowFeatures(detachedWindowLayout[key])}
+            >
+              <DockLayoutManager
+                groups={groups}
+                defaultActivePanelId={defaultLayout.dockbox.id}
+                defaultLayout={defaultLayout}
+                dropMode={dropMode}
+                style={style}
+                tabDataSchema={tabDataSchema}
+              />
+            </NewWindow>
+          );
+        })}
       </Fragment>
     );
   }
